@@ -41,16 +41,10 @@ char* APITx::toJSON(){
     return Payload;
 }
 bool APITx::fromBuf(char* startBuf, char* endBuf){
-    for(char* a = startBuf; a <= endBuf; a++){
-        Serial.println(*a);
-        // *a = *a - '0';
-    }
-    Serial.println("ATTEMPTING FROM BUF");
-    if( (endBuf - startBuf) + 1 < 4*11){ // We require 11 floats. floats are 4 bytes in arduino
-        Serial.println(endBuf - startBuf);
+    // Serial.println((int)(endBuf - startBuf));
+    if( (endBuf - startBuf) + 1 < 4*14){ // We require 11 floats. floats are 4 bytes in arduino
         return false;
     }
-
     timestamp = millis();
     is_default = false;
 
@@ -68,6 +62,15 @@ bool APITx::fromBuf(char* startBuf, char* endBuf){
     currAddr += sizeof(float);
 
     acc_z = *((float*)currAddr);
+    currAddr += sizeof(float);
+
+    x_rot = *((float*)currAddr);
+    currAddr += sizeof(float);
+
+    y_rot = *((float*)currAddr);
+    currAddr += sizeof(float);
+
+    z_rot = *((float*)currAddr);
     currAddr += sizeof(float);
 
     obstacle_dist = *((float*)currAddr);
@@ -91,7 +94,6 @@ bool APITx::fromBuf(char* startBuf, char* endBuf){
     return true;
 }
 bool APIRx::readFromJSON(String json){ 
-    Serial.println(json);
     DeserializationError err = deserializeJson(JsonParser, json);
     if(err){
         Serial.print("JSON parsing failed: \"");
@@ -104,6 +106,7 @@ bool APIRx::readFromJSON(String json){
     stop_distance = JsonParser["stop_distance"].as<float>();
     stop_accel = JsonParser["stop_accel"].as<float>();
     is_default = JsonParser["is_default"].as<int>();
+    emergency_stop = JsonParser["emergency_stop"].as<int>();
     return true;
 }
 /*
@@ -121,8 +124,8 @@ bool APIRx::toBuffer(byte* buffer, unsigned int* length){
 
     // Cast the bool to an integer so that we are always writing to 32-bit aligned addresses
     // Otherwise MCU will crash
-    *((int*)currAddr) = autonomous_steer;
-    currAddr += sizeof(int);
+    *((float*)currAddr) = (float)autonomous_steer;
+    currAddr += sizeof(float);
 
     *((float*)currAddr) = steer_direction;
     currAddr += sizeof(float);
@@ -133,7 +136,10 @@ bool APIRx::toBuffer(byte* buffer, unsigned int* length){
     *((float*)currAddr) = stop_accel;
     currAddr += sizeof(float);
 
-    *length = sizeof(float)*3 + sizeof(bool) + sizeof(int);
+    *((float*)currAddr) = (float)emergency_stop;
+    currAddr += sizeof(float);
+
+    *length = (int)(currAddr - buffer);
     return true;
 }
 void APIRx::print(){

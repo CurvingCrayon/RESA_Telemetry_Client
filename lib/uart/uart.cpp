@@ -16,7 +16,7 @@ void convertBufferToChars(){
 bool uart_tx(bool blocking){
     if(SerialPort.availableForWrite()){
         Serial.print("STRT");
-        convertBufferToChars();
+        // convertBufferToChars(); // Converts numerical values to chars by adding '0'
         SerialPort.write(OutputBuffer, BufferLength);
         Serial.print("STOP");
         Serial.println();

@@ -11,6 +11,7 @@
 #include "api.h"
 #include "uart.h"
 
+#define SERIAL_DEBUG false
 #define SERIAL_BUF_SIZE 255
 char URLBuffer[SERIAL_BUF_SIZE];
 int UrlIndex = 0;
@@ -19,7 +20,7 @@ APIRx ReceiveData;
 APITx TransmitData;
 
 void setup() {
-	Serial.begin(9600);
+	Serial.begin(115200);
 	Serial.println("Starting setup...");
 
 	URLBuffer[0] = '\0'; // Initalize buffer with empty string
@@ -33,6 +34,18 @@ char* getDataStart(char* buf, int length){
 	}
 	return 0;
 }
+// Realigns the specified addresses in the url buffer to the 4-byte boundary to the right of it
+int align_url_buffer(char* startAddr, char* endAddr){
+	int shiftAmount = 4 - (((int)startAddr)%4);
+	if(shiftAmount == 4){ // Already aligned
+		return 0;
+	}
+	// Starting from the end (to avoid overwriting), shift values to the right
+	for(char* addr = endAddr; addr >= startAddr; addr--){
+		*(addr+shiftAmount) = *addr;
+	}
+	return shiftAmount;
+}
 void loop() {
 	// Wifi init
 	// Wait 5 seconds after setup before wifi init
@@ -41,12 +54,12 @@ void loop() {
 	}
 	// wait for WiFi connection
 	if (wifi_connected()) {
-		if(millis() %10000 == 0){
+		if(millis() %500 == 0){
 			char* json_data = TransmitData.toJSON();
 			String response = wifi_post_json(json_data);
 			ReceiveData.readFromJSON(response);
-			
-			ReceiveData.print();
+
+			if(SERIAL_DEBUG) ReceiveData.print();
 
 			ReceiveData.toBuffer(OutputBuffer, &BufferLength);
 			uart_tx(true);
@@ -56,74 +69,90 @@ void loop() {
 		}
 	}
 	else{
-		if(millis() % 10000 == 0){ // Re-attempt connections every 10 seconds
+		if(millis() % 1000 == 0){ // Re-attempt connections every 5 seconds
 			if(wifi_attempt_connection()){
-				Serial.println("WIFI CONNECTED");
+				if(SERIAL_DEBUG) Serial.println("WIFI CONNECTED");
 			}
 			else{
-				Serial.println("WIFI NOT CONNECTED");
+				if(SERIAL_DEBUG) Serial.println("WIFI NOT CONNECTED");
 			}
 		}
 	}
-	
-	// UART communication
-	if(millis() % 1000 == 0){
-		// ReceiveData.toBuffer(OutputBuffer, &BufferLength);
-		// uart_tx(true);
-	}
 
 	// URL configuration
-	if (Serial.available() > 0) {
-		// read the incoming byte:
+	while (Serial.available() > 0) {
 		char incomingByte = Serial.read();
+		
+		// Serial.println(incomingByte);
 		URLBuffer[UrlIndex] = incomingByte;
 		UrlIndex++;
 		if(UrlIndex >= SERIAL_BUF_SIZE-1){
 			// Reset buffer
 			URLBuffer[0] = '\0';
 			UrlIndex = 0;
-			Serial.println("URL max length reached");
+			// Serial.println("URL max length reached");
 		}
-		else{
-			char* dataStart = getDataStart(URLBuffer, UrlIndex-1);
-			if(dataStart == 0){ // If not an mcu command
-				if(incomingByte == 27){ //Escape
-					URLBuffer[0] = '\0';
-					UrlIndex = 0;
-				}
-				else if(incomingByte == 10){ // Line feed
-					URLBuffer[UrlIndex-1] = '\0';
-					wifi_set_url(URLBuffer, UrlIndex-2);
-					UrlIndex = 0;
-					Serial.print("Setting target URL: ");
-					Serial.println(URLBuffer);
-				}
-				else if(incomingByte == 34){ // Enter
-					URLBuffer[UrlIndex-1] = '\0';
-					UrlIndex = 0;
-				}
-				else if(incomingByte == 8){ // Backspace
-					UrlIndex--;
-					URLBuffer[UrlIndex] = '\0';
-					UrlIndex--;
-					Serial.println(URLBuffer);
-				}
-				else{
-					URLBuffer[UrlIndex] = '\0';
-					Serial.println(URLBuffer);
-				}
-			}
-			else{ // If an mcu command
-				URLBuffer[UrlIndex] = '\0';
-				Serial.println(URLBuffer);
-				if(UrlIndex > 4 && URLBuffer[UrlIndex-4] == 'S' && URLBuffer[UrlIndex-3] == 'T' && URLBuffer[UrlIndex-2] == 'O' && URLBuffer[UrlIndex-1] == 'P'){
-					TransmitData.fromBuf(dataStart, URLBuffer + UrlIndex - 5);
-					UrlIndex = 0; // Reset buffer
-				}
-			}
-		
-			// Check for MCU communication
-			
+		char* dataStart = getDataStart(URLBuffer, UrlIndex-1); // Checks if STRT is in the buffer at all
+	
+		URLBuffer[UrlIndex] = '\0';
+		// Serial.println(URLBuffer);
+		if(dataStart != 0 && UrlIndex > 4 && URLBuffer[UrlIndex-4] == 'S' && URLBuffer[UrlIndex-3] == 'T' && URLBuffer[UrlIndex-2] == 'O' && URLBuffer[UrlIndex-1] == 'P'){
+			// Serial.println("Packet found!");
+			int shiftAmount = align_url_buffer(dataStart, URLBuffer + UrlIndex - 5);
+			TransmitData.fromBuf(dataStart+shiftAmount, URLBuffer + UrlIndex - 5 + shiftAmount); // dataStart will be the first char after 'STRT', and URLBuffer + UrlIndex-5 will be the last char before "STOP"
+			UrlIndex = 0; // Reset buffer
 		}
+
+
+
+		// // read the incoming byte:
+		// char incomingByte = Serial.read();
+		// URLBuffer[UrlIndex] = incomingByte;
+		// UrlIndex++;
+		// if(UrlIndex >= SERIAL_BUF_SIZE-1){
+		// 	// Reset buffer
+		// 	URLBuffer[0] = '\0';
+		// 	UrlIndex = 0;
+		// 	Serial.println("URL max length reached");
+		// }
+		// else{
+		// 	char* dataStart = getDataStart(URLBuffer, UrlIndex-1); // Checks if STRT is in the buffer at all
+		// 	if(dataStart == 0){ // If not an mcu command
+		// 		if(incomingByte == 27){ //Escape
+		// 			URLBuffer[0] = '\0';
+		// 			UrlIndex = 0;
+		// 		}
+		// 		else if(incomingByte == 10){ // Line feed
+		// 			URLBuffer[UrlIndex-1] = '\0';
+		// 			wifi_set_url(URLBuffer, UrlIndex-2);
+		// 			UrlIndex = 0;
+		// 			Serial.print("Setting target URL: ");
+		// 			Serial.println(URLBuffer);
+		// 		}
+		// 		else if(incomingByte == 34){ // Enter
+		// 			URLBuffer[UrlIndex-1] = '\0';
+		// 			UrlIndex = 0;
+		// 		}
+		// 		else if(incomingByte == 8){ // Backspace
+		// 			UrlIndex--;
+		// 			URLBuffer[UrlIndex] = '\0';
+		// 			UrlIndex--;
+		// 			// Serial.println(URLBuffer);
+		// 		}
+		// 		else{
+		// 			URLBuffer[UrlIndex] = '\0';
+		// 			// Serial.println(URLBuffer);
+		// 		}
+		// 	}
+		// 	else{ // If an mcu command
+		// 		URLBuffer[UrlIndex] = '\0';
+		// 		// Serial.println(URLBuffer);
+		// 		if(UrlIndex > 4 && URLBuffer[UrlIndex-4] == 'S' && URLBuffer[UrlIndex-3] == 'T' && URLBuffer[UrlIndex-2] == 'O' && URLBuffer[UrlIndex-1] == 'P'){
+		// 			int shiftAmount = align_url_buffer(dataStart, URLBuffer + UrlIndex - 5);
+		// 			TransmitData.fromBuf(dataStart+shiftAmount, URLBuffer + UrlIndex - 5 + shiftAmount); // dataStart will be the first char after 'STRT', and URLBuffer + UrlIndex-5 will be the last char before "STOP"
+		// 			UrlIndex = 0; // Reset buffer
+		// 		}
+		// 	}
+		// }
 	}
 }

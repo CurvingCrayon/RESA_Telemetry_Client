@@ -49,5 +49,7 @@ class APIRx{
     float stop_distance = 0;
     float stop_accel = 0;
 
+    int emergency_stop = 0;
+
     bool is_default = true; // Indicates if this class object has been modified or just contains default values
 };
