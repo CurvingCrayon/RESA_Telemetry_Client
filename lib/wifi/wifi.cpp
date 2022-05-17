@@ -17,7 +17,7 @@ ESP8266WiFiMulti WiFiMulti;
 bool IsInitialized = false;
 bool IsConnected = false;
 
-String WifiURL = "";
+String WifiURL = "http://172.19.121.20/mcu/0";
 
 void wifi_init(){
 	if(!IsInitialized){
@@ -28,16 +28,16 @@ void wifi_init(){
 		WiFiMulti.addAP("octopus", "shrekthethird");
 
 		// Load saved URL from EEPROM
-		EEPROM.begin(MAX_URL_LENGTH);
-		for(int i = 0; i < MAX_URL_LENGTH; i++){
-			char c = EEPROM.read(URL_FLASH_ADDR+i);
-			if(c == '\0'){
-				break;
-			}
-			WifiURL += c;
-		}
-		if(SERIAL_DEBUG) Serial.print("URL loaded from flash: ");
-		if(SERIAL_DEBUG) Serial.println(WifiURL);
+		// EEPROM.begin(MAX_URL_LENGTH);
+		// for(int i = 0; i < MAX_URL_LENGTH; i++){
+		// 	char c = EEPROM.read(URL_FLASH_ADDR+i);
+		// 	if(c == '\0'){
+		// 		break;
+		// 	}
+		// 	WifiURL += c;
+		// }
+		// if(SERIAL_DEBUG) Serial.print("URL loaded from flash: ");
+		// if(SERIAL_DEBUG) Serial.println(WifiURL);
 		IsInitialized = true;
 	}
 }

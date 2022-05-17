@@ -78,7 +78,7 @@ void loop() {
 			ReceiveData.readFromJSON(response);
 
 			if(SERIAL_DEBUG) ReceiveData.print();
-
+			
 			ReceiveData.toBuffer(OutputBuffer, &BufferLength);
 			uart_tx(true);
 
