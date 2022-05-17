@@ -23,6 +23,9 @@ const char PAYLOAD_STRUCTURE[] = "{"
     "\"steer_pwm\": %.02f,"
     "\"drive_pwm\": %.02f,"
 
+    // Debug messages
+    "\"uno_debug_msg\": \"%s\","
+
     // Misc/non-physical data
     "\"timestamp\": %d,"
     "\"is_default\": %d"
@@ -37,12 +40,14 @@ char* APITx::toJSON(){
                                         obstacle_dist, x_rot, y_rot, z_rot,
                                         emergency_stop, steer_direction,
                                         power_pwm, steer_pwm, drive_pwm,
+                                        uno_debug_msg,
                                         timestamp, is_default );
     return Payload;
 }
 bool APITx::fromBuf(char* startBuf, char* endBuf){
     // Serial.println((int)(endBuf - startBuf));
-    if( (endBuf - startBuf) + 1 < 4*14){ // We require 11 floats. floats are 4 bytes in arduino
+    if( (endBuf - startBuf) + 1 < 4*15){ // We require 11 floats. floats are 4 bytes in arduino
+        Serial.println("Packet too small. Rejected.");
         return false;
     }
     timestamp = millis();
@@ -90,7 +95,22 @@ bool APITx::fromBuf(char* startBuf, char* endBuf){
 
     drive_pwm = *((float*)currAddr);
     currAddr += sizeof(float);
-    
+
+    uno_msg_size = *((float*)currAddr);
+    currAddr += sizeof(float);
+
+
+    for(int i = 0; i < uno_msg_size; i++){
+        if(currAddr > endBuf){
+            return true;
+        }
+        uno_debug_msg[i] = *((char*)currAddr);
+        currAddr += sizeof(char);
+        
+    }
+    uno_debug_msg[uno_msg_size] = '\0';
+    currAddr += sizeof(char);
+
     return true;
 }
 bool APIRx::readFromJSON(String json){ 

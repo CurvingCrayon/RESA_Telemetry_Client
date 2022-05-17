@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#define DEBUG_MSG_SIZE 256
 
 typedef enum {
     STRAIGHT = 0,
@@ -29,6 +30,12 @@ class APITx{
     float power_pwm = 0;
     float steer_pwm = 0;
     float drive_pwm = 0;
+
+    // Debug messages
+    int esp_msg_size = 0;
+    char esp_debug_msg[DEBUG_MSG_SIZE];
+    int uno_msg_size = 0;
+    char uno_debug_msg[DEBUG_MSG_SIZE];
 
     // Misc/non-physical data
     int timestamp = 0;
