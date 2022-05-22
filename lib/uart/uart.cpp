@@ -8,11 +8,13 @@ bool init_uart(HardwareSerial serialPort){
     SerialPort = serialPort;
     return true;
 }
+// Convert integer values into their respective chars (used for debugging)
 void convertBufferToChars(){
     for(unsigned int i = 0; i < BufferLength; i++){
         *((char*)(OutputBuffer+i)) = *((char*)(OutputBuffer+i)) + '0';
     }
 }
+// Transmits a stored UART packet over UART
 bool uart_tx(bool blocking){
     if(SerialPort.availableForWrite()){
         Serial.print("STRT");

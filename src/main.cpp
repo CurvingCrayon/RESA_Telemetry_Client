@@ -16,8 +16,8 @@
 
 #define ENABLE_URL_SETTING	false
 
-#define WIFI_LED D6
-#define UART_LED D4
+#define WIFI_LED D6 // LED	used for wifi indication
+#define UART_LED D4 // LED	used for UART indication
 
 char URLBuffer[SERIAL_BUF_SIZE];
 int UrlIndex = 0;
@@ -35,6 +35,7 @@ void setup() {
 	pinMode(WIFI_LED, OUTPUT);
 	pinMode(UART_LED, OUTPUT);
 }
+// Checks for start of a UART packet within a given buffer. Returns 0 if unfound.
 char* getDataStart(char* buf, int length){
 	for(int i = 0; i < length-4; i++){
 		if(*(buf+i) == 'S' && *(buf+i+1) == 'T' && *(buf+i+2) == 'R' && *(buf+i+3) == 'T'){
@@ -43,6 +44,7 @@ char* getDataStart(char* buf, int length){
 	}
 	return 0;
 }
+// Checks for end of a UART	packet within a given buffer. Returns 0 if unfound.
 char* getDataEnd(char* buf, int length){
 	for(int i = 0; i < length-4; i++){
 		if(*(buf+i) == 'S' && *(buf+i+1) == 'T' && *(buf+i+2) == 'O' && *(buf+i+3) == 'P'){
@@ -52,6 +54,7 @@ char* getDataEnd(char* buf, int length){
 	return 0;
 }
 // Realigns the specified addresses in the url buffer to the 4-byte boundary to the right of it
+// This is necessary when dereferencing memory, as required by microcontrollers.
 int align_url_buffer(char* startAddr, char* endAddr){
 	int shiftAmount = 4 - (((int)startAddr)%4);
 	if(shiftAmount == 4){ // Already aligned
@@ -71,23 +74,22 @@ void loop() {
 	}
 	// wait for WiFi connection
 	if (wifi_connected()) {
-		digitalWrite(WIFI_LED, 1);
-		if(millis() % 1000 == 0){
-			char* json_data = TransmitData.toJSON();
-			String response = wifi_post_json(json_data);
-			ReceiveData.readFromJSON(response);
+		digitalWrite(WIFI_LED, 1); // LED indication
+		if(millis() % 1000 == 0){ // Every second
+			// Wifi transmit
+			char* json_data = TransmitData.toJSON();      // Convert data class to a json object as a string
+			String response = wifi_post_json(json_data);  // Send POST request over wifi, returning a JSON response from the server
+			ReceiveData.readFromJSON(response);           // Converte json object into a class member
 
-			if(SERIAL_DEBUG) ReceiveData.print();
+			if(SERIAL_DEBUG) ReceiveData.print();         // Print received data contents over UART (for debugging only)
 			
-			ReceiveData.toBuffer(OutputBuffer, &BufferLength);
-			uart_tx(true);
-
-			
-			
+			ReceiveData.toBuffer(OutputBuffer, &BufferLength); // Convert class member into a UART packet
+			uart_tx(true);									   // Transmit packet over UART
 		}
 	}
 	else{
-		if(millis() % 1000 == 0){ // Re-attempt connections every 5 seconds
+		if(millis() % 1000 == 0){ // Re-attempt connections every 1 second
+			// WiFi LED	indication
 			if(wifi_attempt_connection()){
 				if(SERIAL_DEBUG) Serial.println("WIFI CONNECTED");
 				digitalWrite(WIFI_LED, 1);
@@ -102,83 +104,24 @@ void loop() {
 		}
 	}
 
-	// URL configuration
-	while (Serial.available() > 0) {
-		if(!ENABLE_URL_SETTING){
-			char incomingByte = Serial.read();
-			
-			// Serial.println(incomingByte);
-			URLBuffer[UrlIndex] = incomingByte;
-			UrlIndex++;
-			if(UrlIndex >= SERIAL_BUF_SIZE-1){
-				// Reset buffer
-				URLBuffer[0] = '\0';
-				UrlIndex = 0;
-				// Serial.println("URL max length reached");
-			}
-			char* dataStart = getDataStart(URLBuffer, UrlIndex-1); // Checks if STRT is in the buffer at all
-			// char* dataEnd = getDataEnd(URLBuffer,)
-			URLBuffer[UrlIndex] = '\0';
-			// Serial.println(URLBuffer);
-			if(dataStart != 0 && UrlIndex > 4 && URLBuffer[UrlIndex-4] == 'S' && URLBuffer[UrlIndex-3] == 'T' && URLBuffer[UrlIndex-2] == 'O' && URLBuffer[UrlIndex-1] == 'P'){
-				Serial.println("Packet found!");
-				int shiftAmount = align_url_buffer(dataStart, URLBuffer + UrlIndex - 5);
-				TransmitData.fromBuf(dataStart+shiftAmount, URLBuffer + UrlIndex - 5 + shiftAmount); // dataStart will be the first char after 'STRT', and URLBuffer + UrlIndex-5 will be the last char before "STOP"
-				UrlIndex = 0; // Reset buffer
-			}
+	// URL configuration / packet receiving
+	// URL configuration allows one to set the URL of the telemetry server using a serial terminal
+	while (Serial.available() > 0) { // If UART	byte received
+		char incomingByte = Serial.read();
+		URLBuffer[UrlIndex] = incomingByte; // Add byte to internal buffer
+		UrlIndex++;
+		if(UrlIndex >= SERIAL_BUF_SIZE-1){ // If buffer size exceeded
+			// Reset buffer
+			URLBuffer[0] = '\0';
+			UrlIndex = 0;
 		}
-		else{
-
-			// read the incoming byte:
-			char incomingByte = Serial.read();
-			URLBuffer[UrlIndex] = incomingByte;
-			UrlIndex++;
-			if(UrlIndex >= SERIAL_BUF_SIZE-1){
-				// Reset buffer
-				URLBuffer[0] = '\0';
-				UrlIndex = 0;
-				Serial.println("URL max length reached");
-			}
-			else{
-				char* dataStart = getDataStart(URLBuffer, UrlIndex-1); // Checks if STRT is in the buffer at all
-				if(dataStart == 0){ // If not an mcu command
-					if(incomingByte == 27){ //Escape
-						URLBuffer[0] = '\0';
-						UrlIndex = 0;
-					}
-					else if(incomingByte == 10){ // Line feed
-						URLBuffer[UrlIndex-1] = '\0';
-						wifi_set_url(URLBuffer, UrlIndex-2);
-						UrlIndex = 0;
-						Serial.print("Setting target URL: ");
-						Serial.println(URLBuffer);
-					}
-					else if(incomingByte == 34){ // Enter
-						URLBuffer[UrlIndex-1] = '\0';
-						UrlIndex = 0;
-					}
-					else if(incomingByte == 8){ // Backspace
-						UrlIndex--;
-						URLBuffer[UrlIndex] = '\0';
-						UrlIndex--;
-						// Serial.println(URLBuffer);
-						//http://172.19.120.124/mcu
-					}
-					else{
-						URLBuffer[UrlIndex] = '\0';
-						// Serial.println(URLBuffer);
-					}
-				}
-				else{ // If an mcu command
-					URLBuffer[UrlIndex] = '\0';
-					// Serial.println(URLBuffer);
-					if(UrlIndex > 4 && URLBuffer[UrlIndex-4] == 'S' && URLBuffer[UrlIndex-3] == 'T' && URLBuffer[UrlIndex-2] == 'O' && URLBuffer[UrlIndex-1] == 'P'){
-						int shiftAmount = align_url_buffer(dataStart, URLBuffer + UrlIndex - 5);
-						TransmitData.fromBuf(dataStart+shiftAmount, URLBuffer + UrlIndex - 5 + shiftAmount); // dataStart will be the first char after 'STRT', and URLBuffer + UrlIndex-5 will be the last char before "STOP"
-						UrlIndex = 0; // Reset buffer
-					}
-				}
-			}
+		char* dataStart = getDataStart(URLBuffer, UrlIndex-1); // Checks if STRT is in the buffer at all
+		URLBuffer[UrlIndex] = '\0'; // Terminate string in case printed over UART
+		// If the start and end of a packet is detected
+		if(dataStart != 0 && UrlIndex > 4 && URLBuffer[UrlIndex-4] == 'S' && URLBuffer[UrlIndex-3] == 'T' && URLBuffer[UrlIndex-2] == 'O' && URLBuffer[UrlIndex-1] == 'P'){
+			int shiftAmount = align_url_buffer(dataStart, URLBuffer + UrlIndex - 5);
+			TransmitData.fromBuf(dataStart+shiftAmount, URLBuffer + UrlIndex - 5 + shiftAmount); // dataStart will be the first char after 'STRT', and URLBuffer + UrlIndex-5 will be the last char before "STOP"
+			UrlIndex = 0; // Reset buffer
 		}
 	}
 }

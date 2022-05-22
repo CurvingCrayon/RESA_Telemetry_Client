@@ -4,6 +4,7 @@
 
 StaticJsonDocument<500> JsonParser;
 
+// Set JSON encoding structure
 const char PAYLOAD_STRUCTURE[] = "{"
     // Readings
     "\"speed\": %.02f,"
@@ -44,8 +45,8 @@ char* APITx::toJSON(){
                                         timestamp, is_default );
     return Payload;
 }
+// Unpacks a UART packet (minus the starting and terminating characters) into a class member
 bool APITx::fromBuf(char* startBuf, char* endBuf){
-    // Serial.println((int)(endBuf - startBuf));
     if( (endBuf - startBuf) + 1 < 4*15){ // We require 11 floats. floats are 4 bytes in arduino
         Serial.println("Packet too small. Rejected.");
         return false;
@@ -113,6 +114,7 @@ bool APITx::fromBuf(char* startBuf, char* endBuf){
 
     return true;
 }
+// Unpacks a JSON object into a class member values
 bool APIRx::readFromJSON(String json){ 
     DeserializationError err = deserializeJson(JsonParser, json);
     if(err){
@@ -129,13 +131,7 @@ bool APIRx::readFromJSON(String json){
     emergency_stop = JsonParser["emergency_stop"].as<int>();
     return true;
 }
-/*
-    bool autonomous_steer = false;
-    int steer_direction = STRAIGHT;
-    int timestamp = 0;
-
-    float stop_distance = 0;
-    float stop_accel = 0;*/
+// Packs a class member into a UART packet
 bool APIRx::toBuffer(byte* buffer, unsigned int* length){
     byte* currAddr = buffer; // Start at first address
 

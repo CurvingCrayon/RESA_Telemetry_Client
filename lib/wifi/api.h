@@ -7,7 +7,7 @@ typedef enum {
     RIGHT = 2
 } SteerDir;
 
-
+// Class structures used for story telemetry transmit and receive data
 class APITx{
     public:
     APITx();
